@@ -61,12 +61,22 @@ def create_message(file_dict):
 
     # Create a new subject line.
     subject_original = mailobject['Subject']
-    subject = "FW: " + subject_original
+    subject = subject_original
 
     # The body text of the email.
-    body_text = ("The attached message was received from "
+    body_text = ''
+    for part in mailobject.walk():
+        if part.get_content_maintype() == 'multipart':
+            continue
+        if not part.get_filename():
+            charset = str(part.get_content_charset())
+            if charset:
+                body_text += part.get_payload(decode=True).decode(charset, errors="replace")
+            else:
+                body_text += part.get_payload(decode=True)
+    body_text += ("\n\nThe message was received from "
               + separator.join(mailobject.get_all('From'))
-              + ". This message is archived at " + file_dict['path'])
+              + ".\nThis message is archived at\n" + file_dict['path'])
 
     # The file name to use for the attached message. Uses regex to remove all
     # non-alphanumeric characters, and appends a file extension.
@@ -75,7 +85,7 @@ def create_message(file_dict):
     # Create a MIME container.
     msg = MIMEMultipart()
     # Create a MIME text part.
-    text_part = MIMEText(body_text, _subtype="html")
+    text_part = MIMEText(body_text, _subtype="plain")
     # Attach the text part to the MIME message.
     msg.attach(text_part)
 
@@ -84,12 +94,13 @@ def create_message(file_dict):
     msg['From'] = sender
     msg['To'] = recipient
 
+    # If you want to attach .eml, uncomment these.
     # Create a new MIME object.
-    att = MIMEApplication(file_dict["file"], filename)
-    att.add_header("Content-Disposition", 'attachment', filename=filename)
+    # att = MIMEApplication(file_dict["file"], filename)
+    # att.add_header("Content-Disposition", 'attachment', filename=filename)
 
     # Attach the file object to the message.
-    msg.attach(att)
+    # msg.attach(att)
 
     message = {
         "Source": sender,
@@ -102,7 +113,7 @@ def create_message(file_dict):
 def send_email(message):
     aws_region = os.environ['Region']
 
-# Create a new SES client.
+    # Create a new SES client.
     client_ses = boto3.client('ses', region)
 
     # Send the email.
@@ -141,4 +152,3 @@ def lambda_handler(event, context):
     # Send the email and print the result.
     result = send_email(message)
     print(result)
-
